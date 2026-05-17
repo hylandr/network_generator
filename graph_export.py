@@ -257,7 +257,7 @@ def export_run_folder_name(metadata: dict[str, Any]) -> str:
 
     Uses ``model``, ``n``, ``radius``, ``positions_sampler.inputs``,
     ``profiles_sampler.inputs``, and counts labels in ``initial_profiles``.
-    ``seed`` does not appear in the name.
+    ``position_seed`` / ``profile_seed`` do not appear in the name.
 
     Caller should store full parameters in JSON; this string is only for grouping files.
     """

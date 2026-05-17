@@ -444,20 +444,20 @@ def generate(
 
 if __name__ == "__main__":
     # Batch sweep: build a GeometricMultidigraphConfig per parameter combo, then generate once.
-    position_seeds = 50
-    profile_seeds = 50
+    position_seeds = 20
+    profile_seeds = 20
     catalog = list(DEFAULT_PROTOCOLS)
 
-    for p_seed in range(position_seeds):
-        for f_seed in range(profile_seeds):
+    for pos_seed in range(position_seeds):
+        for prof_seed in range(profile_seeds):
             for alpha_outer in [2, 4, 8]:
                 for alpha_inner in [2, 4, 8]:
                     for mean_tags in [2, 4, 6]:
                         for radius in [0.15, 0.25, 0.35]:
                             config = GeometricMultidigraphConfig(
                                 protocols=catalog,
-                                position_seed=position_seeds,
-                                profile_seed=profile_seeds,
+                                position_seed=pos_seed,
+                                profile_seed=prof_seed,
                                 n=30,
                                 radius=radius,
                                 positions=UniformPositions(x0=0, x1=1, y0=0, y1=1),
@@ -478,7 +478,7 @@ if __name__ == "__main__":
                             )
                             export_path = (
                                 export_dir
-                                / f"rgg_with_stats_p{export_meta['position_seed']}_f{export_meta['profile_seed']}.json"
+                                / f"rgg_with_stats_pos{export_meta['position_seed']}_prof{export_meta['profile_seed']}.json"
                             )
 
                             write_graph_export(
@@ -492,7 +492,9 @@ if __name__ == "__main__":
                             assert G_loaded.number_of_nodes() == G.number_of_nodes()
                             assert G_loaded.number_of_edges() == G.number_of_edges()
                             print(f"Exported and reloaded graph from {export_path}")
-                            if seed < 20:
+
+
+                            if pos_seed < 20 and prof_seed < 20:
                                 figure_dir = repo_root / "figure" / export_dir.name
                                 figure_dir.mkdir(parents=True, exist_ok=True)
                                 figure_path = figure_dir / f"{export_path.stem}.png"

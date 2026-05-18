@@ -14,7 +14,14 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.patches import FancyArrowPatch
 
-# Default layout: one subplot per protocol that appears on at least one edge.
+from geometric_multidigraph_config import GeometricMultidigraphConfig
+
+# Per-protocol panels: profile contains this protocol vs not.
+_NODE_HAS_PROTOCOL = "#2a9d8f"
+_NODE_LACKS_PROTOCOL = "#e63946"
+_NODE_SIZE = 100
+
+# Default layout: one subplot per catalog protocol (edges optional; nodes colored by profile).
 PER_PROTOCOL_FIGURE = True
 
 
@@ -156,21 +163,64 @@ def _style_axes(ax, *, xlabel: bool = False, ylabel: bool = False) -> None:
         ax.set_ylabel("y", fontsize=9)
 
 
-def _protocols_with_edges(
+def _protocols_for_panels(
     G: nx.DiGraph, proto_order: Sequence[str] | None
 ) -> list[str]:
-    """Protocols on at least one edge.
+    """Protocols to show as subplots (one panel each, even if no edges).
 
-    If ``proto_order`` is set, that order is used first, then any other tags on edges.
-    If ``proto_order`` is None, panels are sorted alphabetically by protocol name.
+    If ``proto_order`` is set, every catalog entry gets a panel. Otherwise use all
+    tags seen on node profiles or edges, sorted alphabetically.
     """
-    seen_on_edge = {d.get("protocol") for _, _, d in G.edges(data=True)}
-    seen_on_edge.discard(None)
-    if not proto_order:
-        return sorted(seen_on_edge, key=str)
-    ordered = [p for p in proto_order if p in seen_on_edge]
-    rest = sorted(seen_on_edge - set(proto_order), key=str)
-    return ordered + rest
+    if proto_order:
+        return list(proto_order)
+    seen: set[str] = set()
+    for _nid, data in G.nodes(data=True):
+        seen.update(str(p) for p in (data.get("profile") or []))
+    for _u, _v, data in G.edges(data=True):
+        p = data.get("protocol")
+        if p is not None:
+            seen.add(str(p))
+    return sorted(seen, key=str)
+
+
+def format_config_for_plot(cfg: GeometricMultidigraphConfig) -> str:
+    """One-line run summary for figure suptitles."""
+    pos = cfg.positions
+    prof = cfg.profiles
+    pk = pos.sampler_kwargs()
+    pos_parts = [f"dist={pos.distribution}"]
+    for key in sorted(pk.keys()):
+        val = pk[key]
+        if isinstance(val, float):
+            pos_parts.append(f"{key}={val:g}")
+        else:
+            pos_parts.append(f"{key}={val}")
+    pos_str = " ".join(pos_parts)
+    return (
+        f"n={cfg.n}  conn_r={cfg.radius:g}  pos_seed={cfg.position_seed}  "
+        f"prof_seed={cfg.profile_seed}  {pos_str}  "
+        f"ao={prof.alpha_outer:g}  ai={prof.alpha_inner:g}  mt={prof.mean_tags:g}"
+    )
+
+
+def _node_has_protocol(G: nx.DiGraph, node, protocol: str) -> bool:
+    prof = G.nodes[node].get("profile") or []
+    return protocol in prof
+
+
+def _node_style_for_protocol(
+    G: nx.DiGraph,
+    nodes: list,
+    protocol: str,
+) -> tuple[list[float], list[str]]:
+    sizes = [_NODE_SIZE] * len(nodes)
+    colors = [
+        _NODE_HAS_PROTOCOL
+        if _node_has_protocol(G, v, protocol)
+        else _NODE_LACKS_PROTOCOL
+        for v in nodes
+    ]
+    return sizes, colors
 
 
 def _subplot_grid(n: int) -> tuple[int, int]:
@@ -197,40 +247,59 @@ def plot_geometric_rgg(
     dpi: float = 150,
     show: Optional[bool] = None,
     proto_order: Sequence[str] | None = None,
+    config: GeometricMultidigraphConfig | None = None,
 ) -> None:
-    """Draw offset edges/labels; nodes sized/colored by out-degree.
+    """Draw offset edges/labels.
 
-    Optional one panel per protocol (see ``per_protocol``). Parallel offsets use the
-    full graph geometry so opposing directed edges separate cleanly.
+    Per-protocol panels (``per_protocol=True``): highlight nodes whose profile
+    contains that protocol; combined view uses out-degree coloring.
+
+    Pass ``config`` to show run parameters in the figure suptitle.
     """
     pos = nx.get_node_attributes(G, "pos")
     labels_all = {(u, v): d.get("protocol") for u, v, d in G.edges(data=True)}
     deg = dict(G.out_degree())
     nodes = list(G.nodes())
-    sizes = [100 + deg[v] * 10 for v in nodes]
-    colors = [deg[v] for v in nodes]
+    default_sizes = [100 + deg[v] * 10 for v in nodes]
+    default_colors = [deg[v] for v in nodes]
 
     draw_arrows = bool(G.graph.get("bidirectional", True))
     xlim, ylim = _position_limits(pos)
+
+    figure_title = (
+        format_config_for_plot(config) if config is not None else "Geometric multidigraph"
+    )
 
     def one_ax(
         ax,
         edgelist: list[tuple],
         edge_labels: dict,
         *,
+        highlight_protocol: str | None = None,
         xlabel: bool = False,
         ylabel: bool = False,
     ) -> None:
         _draw_offset_edges(ax, G, pos, sep=sep, edgelist=edgelist, draw_arrows=draw_arrows)
-        nx.draw_networkx_nodes(
-            G,
-            pos,
-            ax=ax,
-            nodelist=nodes,
-            node_size=sizes,
-            node_color=colors,
-            cmap=plt.cm.viridis,
-        )
+        if highlight_protocol is not None:
+            sizes, colors = _node_style_for_protocol(G, nodes, highlight_protocol)
+            nx.draw_networkx_nodes(
+                G,
+                pos,
+                ax=ax,
+                nodelist=nodes,
+                node_size=sizes,
+                node_color=colors,
+            )
+        else:
+            nx.draw_networkx_nodes(
+                G,
+                pos,
+                ax=ax,
+                nodelist=nodes,
+                node_size=default_sizes,
+                node_color=default_colors,
+                cmap=plt.cm.viridis,
+            )
         nx.draw_networkx_labels(G, pos, ax=ax, font_size=7)
         _draw_offset_labels(ax, G, pos, edge_labels, sep=sep)
         ax.set_xlim(xlim)
@@ -240,14 +309,14 @@ def plot_geometric_rgg(
         _style_axes(ax, xlabel=xlabel, ylabel=ylabel)
 
     if per_protocol:
-        present = _protocols_with_edges(G, proto_order)
-        if not present:
+        protocols = _protocols_for_panels(G, proto_order)
+        if not protocols:
             fig, ax = plt.subplots(figsize=(8, 8))
             one_ax(ax, list(G.edges()), labels_all, xlabel=True, ylabel=True)
-            fig.suptitle("No edges with protocol set", fontsize=11)
+            fig.suptitle(f"{figure_title}\n(no protocols in catalog)", fontsize=9)
             plt.tight_layout()
         else:
-            n = len(present)
+            n = len(protocols)
             nrows, ncols = _subplot_grid(n)
             fw, fh = 5.5 * ncols, 5.2 * nrows
             fig, axes = plt.subplots(
@@ -256,7 +325,7 @@ def plot_geometric_rgg(
             fig.patch.set_facecolor("#cfcfcf")
             axes_flat = axes.ravel().tolist()
 
-            for i, proto in enumerate(present):
+            for i, proto in enumerate(protocols):
                 ax = axes_flat[i]
                 edgelist = [
                     (u, v)
@@ -265,25 +334,34 @@ def plot_geometric_rgg(
                 ]
                 edge_labels = {(u, v): proto for u, v in edgelist}
                 row, col = divmod(i, ncols)
+                n_has = sum(1 for v in nodes if _node_has_protocol(G, v, proto))
                 one_ax(
                     ax,
                     edgelist,
                     edge_labels,
+                    highlight_protocol=proto,
                     xlabel=row == nrows - 1,
                     ylabel=col == 0,
                 )
-                ax.set_title(proto, pad=10, fontsize=11, fontweight="medium")
+                edge_note = f"{len(edgelist)} edges" if edgelist else "no edges"
+                ax.set_title(
+                    f"{proto}  ({n_has}/{len(nodes)} nodes, {edge_note})",
+                    pad=10,
+                    fontsize=11,
+                    fontweight="medium",
+                )
 
             for j in range(n, len(axes_flat)):
                 axes_flat[j].set_visible(False)
 
-            fig.suptitle("Edges by protocol (offset geometry from full graph)", fontsize=11)
+            fig.suptitle(figure_title, fontsize=9, y=1.0)
             fig.subplots_adjust(
-                wspace=0.28, hspace=0.32, left=0.12, right=0.97, top=0.88, bottom=0.12
+                wspace=0.28, hspace=0.38, left=0.12, right=0.97, top=0.82, bottom=0.12
             )
     else:
         fig, ax = plt.subplots(figsize=(8, 8))
         one_ax(ax, list(G.edges()), labels_all, xlabel=True, ylabel=True)
+        fig.suptitle(figure_title, fontsize=9)
         plt.tight_layout()
 
     if save_path is not None:

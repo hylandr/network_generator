@@ -256,11 +256,12 @@ def export_run_folder_name(metadata: dict[str, Any]) -> str:
     """Build one ``exports/…`` directory name from export metadata.
 
     Uses ``model``, ``n``, ``radius``, ``positions_sampler.inputs``,
-    ``profiles_sampler.inputs``, counts labels in ``initial_profiles``, and
-    ``position_seed`` / ``profile_seed`` (suffix ``_pos…_prof…``). Legacy bundles with
-    only ``seed`` use ``_s…`` instead.
+    ``profiles_sampler.inputs``, and counts labels in ``initial_profiles``.
+    Seeds are **not** in the folder name (use per-file names like
+    ``rgg_with_stats_pos0_prof1.json`` inside the folder).
 
-    Caller should store full parameters in JSON; this string groups files on disk.
+    Caller should store full parameters in JSON; this string groups runs that share
+    the same config except seeds.
     """
     pos_i = metadata["positions_sampler"]["inputs"]
     prof_i = metadata["profiles_sampler"]["inputs"]
@@ -283,19 +284,9 @@ def export_run_folder_name(metadata: dict[str, Any]) -> str:
     ai = _path_num_slug_val(prof_i["alpha_inner"])
     ip = metadata.get("initial_profiles") or ()
     initial_label_count = sum(len(seq or ()) for seq in ip)
-    if "position_seed" in metadata and "profile_seed" in metadata:
-        seed_slug = (
-            f"_pos{_path_num_slug_val(metadata['position_seed'])}"
-            f"_prof{_path_num_slug_val(metadata['profile_seed'])}"
-        )
-    elif "seed" in metadata:
-        seed_slug = f"_s{_path_num_slug_val(metadata['seed'])}"
-    else:
-        seed_slug = ""
     run_folder = (
         f"{model_slug}_n{metadata['n']}_r{rad}_{dist_slug}_{pos_bbox}"
         f"_prof_{initial_label_count}_ao{ao}_ai{ai}_mt{prof_i['mean_tags']}"
-        f"{seed_slug}"
     )
     return run_folder.strip(" .") or "export_run"
 

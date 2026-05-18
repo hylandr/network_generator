@@ -52,7 +52,7 @@ def draw_graph_spring_3d(G: nx.Graph, seed: Optional[int] = None) -> None:
 
 
 if __name__ == "__main__":
-    n = 10
+    n = 30
     m = 20  # for random_gnm(n, m, ...)
     p = 0.3
     seed = 44

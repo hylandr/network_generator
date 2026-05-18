@@ -2,10 +2,12 @@
 
 import math
 import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+import matplotlib
 import networkx as nx
 
 from crp_sampler import CRPSampler
@@ -444,16 +446,34 @@ def generate(
 
 if __name__ == "__main__":
     # Batch sweep: build a GeometricMultidigraphConfig per parameter combo, then generate once.
-    position_seeds = 20
-    profile_seeds = 20
+    matplotlib.use("Agg")
+    position_seeds = 2
+    profile_seeds = 2
     catalog = list(DEFAULT_PROTOCOLS)
+    alpha_outers = [2, 4, 8]
+    alpha_inners = [2, 4, 8]
+    mean_tags_list = [2, 4]
+    radii = [0.25,0.3]
+    run_count = (
+        position_seeds
+        * profile_seeds
+        * len(alpha_outers)
+        * len(alpha_inners)
+        * len(mean_tags_list)
+        * len(radii)
+    )
+    print(
+        f"Quick start: batch sweep ({run_count} configs) — "
+        f"pos seeds 0..{position_seeds - 1}, prof seeds 0..{profile_seeds - 1}"
+    )
+    t0 = time.perf_counter()
 
     for pos_seed in range(position_seeds):
         for prof_seed in range(profile_seeds):
-            for alpha_outer in [2, 4, 8]:
-                for alpha_inner in [2, 4, 8]:
-                    for mean_tags in [2, 4, 6]:
-                        for radius in [0.15, 0.25, 0.35]:
+            for alpha_outer in alpha_outers:
+                for alpha_inner in alpha_inners:
+                    for mean_tags in mean_tags_list:
+                        for radius in radii:
                             config = GeometricMultidigraphConfig(
                                 protocols=catalog,
                                 position_seed=pos_seed,
@@ -499,15 +519,21 @@ if __name__ == "__main__":
                                 figure_dir.mkdir(parents=True, exist_ok=True)
                                 figure_path = figure_dir / f"{export_path.stem}.png"
                                 plot_geometric_rgg(
-                                    G, save_path=figure_path, proto_order=catalog
+                                    G,
+                                    save_path=figure_path,
+                                    proto_order=catalog,
+                                    config=config,
                                 )
                                 print(f"Saved figure to {figure_path}")
 
-                                print_graph_stats_bundle(
-                                    graph_stats(G), heading="Full multigraph (all protocols)"
-                                )
-                                for proto in catalog:
-                                    print_graph_stats_bundle(
-                                        graph_stats(subgraph_by_protocol(G, proto)),
-                                        heading=f"Subgraph: {proto}",
-                                    )
+                                # print_graph_stats_bundle(
+                                #     graph_stats(G), heading="Full multigraph (all protocols)"
+                                # )
+                                # for proto in catalog:
+                                #     print_graph_stats_bundle(
+                                #         graph_stats(subgraph_by_protocol(G, proto)),
+                                #         heading=f"Subgraph: {proto}",
+                                #     )
+
+    elapsed = time.perf_counter() - t0
+    print(f"Done. Total time: {elapsed:.2f}s ({elapsed / 60:.2f} min)")

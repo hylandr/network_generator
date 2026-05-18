@@ -578,6 +578,7 @@ def generate_from_params(body: dict[str, Any]) -> dict[str, Any]:
             dpi=dpi,
             show=False,
             proto_order=catalog,
+            config=config,
         )
         png_b64 = base64.b64encode(png_path.read_bytes()).decode("ascii")
 
